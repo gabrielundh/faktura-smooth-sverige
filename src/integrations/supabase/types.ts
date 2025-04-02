@@ -9,7 +9,149 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      customers: {
+        Row: {
+          address: Json
+          contact: Json
+          created_at: string
+          id: string
+          name: string
+          org_number: string | null
+          reference: string | null
+          updated_at: string
+          user_id: string
+          vat_number: string | null
+        }
+        Insert: {
+          address?: Json
+          contact?: Json
+          created_at?: string
+          id?: string
+          name: string
+          org_number?: string | null
+          reference?: string | null
+          updated_at?: string
+          user_id: string
+          vat_number?: string | null
+        }
+        Update: {
+          address?: Json
+          contact?: Json
+          created_at?: string
+          id?: string
+          name?: string
+          org_number?: string | null
+          reference?: string | null
+          updated_at?: string
+          user_id?: string
+          vat_number?: string | null
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          created_at: string
+          currency: string
+          customer_id: string
+          customer_reference: string | null
+          date: string
+          due_date: string
+          id: string
+          invoice_number: string
+          is_credit: boolean
+          items: Json
+          language: string
+          notes: string | null
+          payment_terms: string
+          reference: string | null
+          status: string
+          total_gross: number
+          total_net: number
+          total_tax: number
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          customer_id: string
+          customer_reference?: string | null
+          date: string
+          due_date: string
+          id?: string
+          invoice_number: string
+          is_credit?: boolean
+          items?: Json
+          language?: string
+          notes?: string | null
+          payment_terms: string
+          reference?: string | null
+          status?: string
+          total_gross?: number
+          total_net?: number
+          total_tax?: number
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          customer_reference?: string | null
+          date?: string
+          due_date?: string
+          id?: string
+          invoice_number?: string
+          is_credit?: boolean
+          items?: Json
+          language?: string
+          notes?: string | null
+          payment_terms?: string
+          reference?: string | null
+          status?: string
+          total_gross?: number
+          total_net?: number
+          total_tax?: number
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          company: Json
+          created_at: string
+          id: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          company?: Json
+          created_at?: string
+          id: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          company?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

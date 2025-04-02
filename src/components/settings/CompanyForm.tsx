@@ -1,18 +1,20 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Company } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { FileImage } from 'lucide-react';
+import { FileImage, Upload } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CompanyFormProps {
   company: Company;
 }
 
 const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
+  const { user, refreshUser } = useAuth();
   const [name, setName] = useState(company.name);
   const [orgNumber, setOrgNumber] = useState(company.orgNumber);
   const [vatNumber, setVatNumber] = useState(company.vatNumber || '');
@@ -29,14 +31,117 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
   const [iban, setIban] = useState(company.iban || '');
   const [taxRate, setTaxRate] = useState(company.taxRate);
   const [logo, setLogo] = useState(company.logo || '');
+  const [isLoading, setIsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     
-    // Här skulle vi normalt uppdatera företagsinformationen via en API-anrop,
-    // men eftersom detta är en demo med hårdkodade användare visar vi bara en toast
-    
-    toast.success("Företagsinformationen har uppdaterats");
+    try {
+      if (!user) {
+        toast.error("Du måste vara inloggad för att uppdatera företagsinformation");
+        return;
+      }
+      
+      const updatedCompany = {
+        name,
+        orgNumber,
+        vatNumber,
+        address: {
+          street,
+          postalCode,
+          city,
+          country
+        },
+        contact: {
+          name: contactName,
+          email,
+          phone
+        },
+        bankgiro,
+        plusgiro,
+        swish,
+        iban,
+        taxRate,
+        logo
+      };
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          company: updatedCompany
+        })
+        .eq('id', user.id);
+      
+      if (error) {
+        console.error('Error updating company:', error);
+        toast.error("Ett fel uppstod när företagsinformationen skulle uppdateras");
+        return;
+      }
+      
+      // Refresh user data to get updated company info
+      await refreshUser();
+      
+      toast.success("Företagsinformationen har uppdaterats");
+    } catch (error) {
+      console.error('Error saving company details:', error);
+      toast.error("Ett fel uppstod när företagsinformationen skulle uppdateras");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user) {
+      return;
+    }
+
+    const file = files[0];
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    try {
+      setIsLoading(true);
+      
+      // Upload file to Supabase storage
+      const { error: uploadError, data } = await supabase.storage
+        .from('company_logos')
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL for the uploaded file
+      const { data: { publicUrl } } = supabase.storage
+        .from('company_logos')
+        .getPublicUrl(filePath);
+
+      setLogo(publicUrl);
+      toast.success("Logotyp har laddats upp");
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      toast.error("Ett fel uppstod när logotypen skulle laddas upp");
+    } finally {
+      setIsLoading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogo('');
+  };
+  
+  const getCompanyInitials = () => {
+    return name ? name.charAt(0).toUpperCase() : '';
   };
 
   return (
@@ -56,19 +161,38 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
                 />
                 <button 
                   type="button" 
-                  onClick={() => setLogo('')}
+                  onClick={handleRemoveLogo}
                   className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                 >
                   ×
                 </button>
               </div>
             ) : (
-              <div className="w-32 h-16 border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400">
-                <FileImage className="h-6 w-6" />
+              <div className="w-32 h-16 border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-gray-50">
+                {name ? (
+                  <span className="text-3xl font-bold text-invoice-700">{getCompanyInitials()}</span>
+                ) : (
+                  <FileImage className="h-6 w-6" />
+                )}
               </div>
             )}
             <div>
-              <Button type="button" variant="outline" size="sm">
+              <input
+                type="file"
+                id="logo-upload"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="hidden"
+                ref={fileInputRef}
+              />
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+              >
+                <Upload className="h-4 w-4 mr-2" />
                 Ladda upp logotyp
               </Button>
               <p className="text-xs text-gray-500 mt-1">Rekommenderad storlek: 200x100 px, PNG eller JPG</p>
@@ -249,8 +373,12 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" className="bg-invoice-700 hover:bg-invoice-800">
-          Spara ändringar
+        <Button 
+          type="submit" 
+          className="bg-invoice-700 hover:bg-invoice-800"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Sparar...' : 'Spara ändringar'}
         </Button>
       </div>
     </form>
