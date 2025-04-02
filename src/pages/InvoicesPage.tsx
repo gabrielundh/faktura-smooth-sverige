@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
-import { useData } from '@/contexts/DataContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Invoice } from '@/types';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, FileText, Search } from 'lucide-react';
+import { Plus, FileText, Search, Trash2 } from 'lucide-react';
 import InvoiceCard from '@/components/invoices/InvoiceCard';
 import {
   AlertDialog,
@@ -21,13 +21,76 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import InvoicePDF from '@/components/invoices/InvoicePDF';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const InvoicesPage: React.FC = () => {
-  const { invoices, deleteInvoice } = useData();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [pdfInvoice, setPdfInvoice] = useState<Invoice | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    if (user) {
+      fetchInvoices();
+    }
+  }, [user]);
+  
+  const fetchInvoices = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          customer:customers(*)
+        `)
+        .eq('user_id', user?.id || '');
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        // Transform the data to match our Invoice type
+        const transformedInvoices: Invoice[] = data.map(item => ({
+          id: item.id,
+          invoiceNumber: item.invoice_number,
+          customer: item.customer,
+          date: item.date,
+          dueDate: item.due_date,
+          items: item.items || [],
+          status: item.status,
+          type: item.type,
+          reference: item.reference,
+          customerReference: item.customer_reference,
+          notes: item.notes,
+          paymentTerms: item.payment_terms,
+          currency: item.currency,
+          language: item.language,
+          totalNet: item.total_net,
+          totalTax: item.total_tax,
+          totalGross: item.total_gross,
+          isCredit: item.is_credit
+        }));
+        
+        setInvoices(transformedInvoices);
+      }
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      toast({
+        title: "Fel vid hämtning av fakturor",
+        description: "Kunde inte ladda dina fakturor. Försök igen senare.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = 
@@ -38,10 +101,35 @@ const InvoicesPage: React.FC = () => {
     return matchesSearch && invoice.status === filter;
   });
   
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (invoiceToDelete) {
-      deleteInvoice(invoiceToDelete);
-      setInvoiceToDelete(null);
+      try {
+        const { error } = await supabase
+          .from('invoices')
+          .delete()
+          .eq('id', invoiceToDelete);
+        
+        if (error) {
+          throw error;
+        }
+        
+        // Remove from local state
+        setInvoices(invoices.filter(invoice => invoice.id !== invoiceToDelete));
+        
+        toast({
+          title: "Faktura borttagen",
+          description: "Fakturan har tagits bort",
+        });
+      } catch (error) {
+        console.error('Error deleting invoice:', error);
+        toast({
+          title: "Fel vid borttagning",
+          description: "Kunde inte ta bort fakturan. Försök igen senare.",
+          variant: "destructive"
+        });
+      } finally {
+        setInvoiceToDelete(null);
+      }
     }
   };
   
@@ -134,7 +222,12 @@ const InvoicesPage: React.FC = () => {
         </div>
       </div>
 
-      {filteredInvoices.length > 0 ? (
+      {isLoading ? (
+        <div className="text-center py-12">
+          <div className="h-12 w-12 mx-auto rounded-full border-4 border-gray-200 border-t-invoice-700 animate-spin mb-4"></div>
+          <h3 className="text-lg font-medium text-gray-700">Laddar fakturor...</h3>
+        </div>
+      ) : filteredInvoices.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredInvoices.map((invoice) => (
             <InvoiceCard
@@ -177,6 +270,7 @@ const InvoicesPage: React.FC = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-500 hover:bg-red-600">
+              <Trash2 className="h-4 w-4 mr-2" />
               Ta bort
             </AlertDialogAction>
           </AlertDialogFooter>

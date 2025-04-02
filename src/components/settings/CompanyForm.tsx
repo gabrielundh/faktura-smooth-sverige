@@ -29,6 +29,10 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
   const [plusgiro, setPlusgiro] = useState(company.plusgiro || '');
   const [swish, setSwish] = useState(company.swish || '');
   const [iban, setIban] = useState(company.iban || '');
+  const [accountNumber, setAccountNumber] = useState(company.accountNumber || '');
+  const [clearingNumber, setClearingNumber] = useState(company.clearingNumber || '');
+  const [bankName, setBankName] = useState(company.bankName || '');
+  const [swift, setSwift] = useState(company.swift || '');
   const [taxRate, setTaxRate] = useState(company.taxRate);
   const [logo, setLogo] = useState(company.logo || '');
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +67,10 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
         plusgiro,
         swish,
         iban,
+        accountNumber,
+        clearingNumber,
+        bankName,
+        swift,
         taxRate,
         logo
       };
@@ -366,6 +374,42 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               id="iban" 
               value={iban} 
               onChange={(e) => setIban(e.target.value)} 
+              className="invoice-field" 
+            />
+          </div>
+          <div>
+            <Label htmlFor="bankName" className="invoice-label">Bank</Label>
+            <Input 
+              id="bankName" 
+              value={bankName} 
+              onChange={(e) => setBankName(e.target.value)} 
+              className="invoice-field" 
+            />
+          </div>
+          <div>
+            <Label htmlFor="clearingNumber" className="invoice-label">Clearingnummer</Label>
+            <Input 
+              id="clearingNumber" 
+              value={clearingNumber} 
+              onChange={(e) => setClearingNumber(e.target.value)} 
+              className="invoice-field" 
+            />
+          </div>
+          <div>
+            <Label htmlFor="accountNumber" className="invoice-label">Kontonummer</Label>
+            <Input 
+              id="accountNumber" 
+              value={accountNumber} 
+              onChange={(e) => setAccountNumber(e.target.value)} 
+              className="invoice-field" 
+            />
+          </div>
+          <div>
+            <Label htmlFor="swift" className="invoice-label">BIC/SWIFT</Label>
+            <Input 
+              id="swift" 
+              value={swift} 
+              onChange={(e) => setSwift(e.target.value)} 
               className="invoice-field" 
             />
           </div>

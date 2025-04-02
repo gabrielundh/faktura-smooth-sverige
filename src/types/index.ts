@@ -2,7 +2,7 @@
 export interface User {
   id: string;
   username: string;
-  password: string;
+  email: string;
   company: Company;
 }
 
@@ -16,6 +16,10 @@ export interface Company {
   plusgiro?: string;
   iban?: string;
   swish?: string;
+  accountNumber?: string;
+  clearingNumber?: string;
+  bankName?: string;
+  swift?: string; // BIC/SWIFT code
   taxRate: number;
   logo?: string;
 }

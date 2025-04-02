@@ -13,18 +13,35 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ invoice }) => {
   
   if (!user) return null;
 
+  const companyName = user.company.name;
+  
+  // Default display of company initials if no logo
+  const renderLogoOrInitials = () => {
+    if (user.company.logo) {
+      return (
+        <img 
+          src={user.company.logo} 
+          alt={`${companyName} logotyp`} 
+          className="h-16 mb-4"
+        />
+      );
+    } else {
+      return (
+        <div className="h-16 mb-4 flex items-center">
+          <span className="text-4xl font-bold text-invoice-700">
+            {companyName.charAt(0).toUpperCase()}
+          </span>
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto bg-white p-8 shadow-md">
       {/* Företagslogotyp och fakturainfo */}
       <div className="flex justify-between items-start mb-8">
         <div>
-          {user.company.logo && (
-            <img 
-              src={user.company.logo} 
-              alt={`${user.company.name} logotyp`} 
-              className="h-16 mb-4"
-            />
-          )}
+          {renderLogoOrInitials()}
           <h1 className="text-2xl font-bold text-invoice-700">FAKTURA</h1>
           <p className="text-sm">Faktura #{invoice.invoiceNumber}</p>
           <p className="text-sm">Datum: {format(parseISO(invoice.date), 'yyyy-MM-dd')}</p>
@@ -32,7 +49,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ invoice }) => {
         </div>
         
         <div className="text-right">
-          <h2 className="font-bold text-lg">{user.company.name}</h2>
+          <h2 className="font-bold text-lg">{companyName}</h2>
           <p className="text-sm">{user.company.address.street}</p>
           <p className="text-sm">{user.company.address.postalCode} {user.company.address.city}</p>
           <p className="text-sm">{user.company.address.country}</p>
@@ -116,6 +133,8 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ invoice }) => {
         <h3 className="font-bold mb-2">Betalningsinformation</h3>
         <p className="mb-1">Betalningsvillkor: {invoice.paymentTerms}</p>
         <p className="mb-1">Förfallodatum: {format(parseISO(invoice.dueDate), 'yyyy-MM-dd')}</p>
+        
+        {/* Display banking information */}
         {user.company.bankgiro && (
           <p className="mb-1">Bankgiro: {user.company.bankgiro}</p>
         )}
@@ -125,6 +144,24 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ invoice }) => {
         {user.company.swish && (
           <p className="mb-1">Swish: {user.company.swish}</p>
         )}
+        {(user.company.bankName || user.company.clearingNumber || user.company.accountNumber) && (
+          <div className="mb-1">
+            {user.company.bankName && <span>Bank: {user.company.bankName}</span>}
+            {user.company.clearingNumber && user.company.accountNumber && (
+              <span> | Konto: {user.company.clearingNumber}-{user.company.accountNumber}</span>
+            )}
+            {!user.company.clearingNumber && user.company.accountNumber && (
+              <span> | Konto: {user.company.accountNumber}</span>
+            )}
+          </div>
+        )}
+        {user.company.iban && (
+          <p className="mb-1">IBAN: {user.company.iban}</p>
+        )}
+        {user.company.swift && (
+          <p className="mb-1">BIC/SWIFT: {user.company.swift}</p>
+        )}
+        
         <p className="mb-1">Ange fakturanummer: {invoice.invoiceNumber} som referens</p>
         
         <p className="mt-2 text-sm">
