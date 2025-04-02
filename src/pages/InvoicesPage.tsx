@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Invoice } from '@/types';
@@ -57,26 +56,45 @@ const InvoicesPage: React.FC = () => {
       
       if (data) {
         // Transform the data to match our Invoice type
-        const transformedInvoices: Invoice[] = data.map(item => ({
-          id: item.id,
-          invoiceNumber: item.invoice_number,
-          customer: item.customer,
-          date: item.date,
-          dueDate: item.due_date,
-          items: item.items || [],
-          status: item.status,
-          type: item.type,
-          reference: item.reference,
-          customerReference: item.customer_reference,
-          notes: item.notes,
-          paymentTerms: item.payment_terms,
-          currency: item.currency,
-          language: item.language,
-          totalNet: item.total_net,
-          totalTax: item.total_tax,
-          totalGross: item.total_gross,
-          isCredit: item.is_credit
-        }));
+        const transformedInvoices: Invoice[] = data.map(item => {
+          // Transform customer data
+          const customerData = item.customer || {};
+          const transformedCustomer = {
+            id: customerData.id || '',
+            name: customerData.name || '',
+            orgNumber: customerData.org_number || '',
+            vatNumber: customerData.vat_number || '',
+            address: typeof customerData.address === 'string' 
+              ? JSON.parse(customerData.address) 
+              : customerData.address || { street: '', postalCode: '', city: '', country: '' },
+            contact: typeof customerData.contact === 'string' 
+              ? JSON.parse(customerData.contact) 
+              : customerData.contact || { email: '', phone: '' },
+            reference: customerData.reference || '',
+            userId: customerData.user_id || ''
+          };
+          
+          return {
+            id: item.id,
+            invoiceNumber: item.invoice_number,
+            customer: transformedCustomer,
+            date: item.date,
+            dueDate: item.due_date,
+            items: item.items || [],
+            status: item.status,
+            type: item.type,
+            reference: item.reference,
+            customerReference: item.customer_reference,
+            notes: item.notes,
+            paymentTerms: item.payment_terms,
+            currency: item.currency,
+            language: item.language,
+            totalNet: item.total_net,
+            totalTax: item.total_tax,
+            totalGross: item.total_gross,
+            isCredit: item.is_credit
+          };
+        });
         
         setInvoices(transformedInvoices);
       }
@@ -153,25 +171,54 @@ const InvoicesPage: React.FC = () => {
         const element = document.getElementById('invoice-pdf');
         if (!element) return;
         
-        const canvas = await html2canvas(element, {
-          scale: 2,
-          useCORS: true,
-          logging: false
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
           format: 'a4'
         });
         
-        const imgWidth = 210;
-        const imgHeight = canvas.height * imgWidth / canvas.width;
+        // Define page dimensions
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
         
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        // Render to canvas with high resolution
+        const canvas = await html2canvas(element, {
+          scale: 4, // Higher scale for better quality
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+        
+        // Get canvas dimensions
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        
+        // Convert canvas to image
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        
+        // Scale to fit A4 page width while maintaining aspect ratio
+        const scaleFactor = pageWidth / canvasWidth;
+        const scaledHeight = canvasHeight * scaleFactor;
+        
+        // Add each page (if content overflows A4 height)
+        let heightLeft = scaledHeight;
+        let position = 0;
+        let page = 1;
+        
+        // Add first page
+        pdf.addImage(imgData, 'PNG', 0, position, pageWidth, scaledHeight);
+        heightLeft -= pageHeight;
+        
+        // Add additional pages if content overflows
+        while (heightLeft > 0) {
+          position = -pageHeight * page;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, pageWidth, scaledHeight);
+          heightLeft -= pageHeight;
+          page++;
+        }
+        
         pdf.save(`faktura-${invoice.invoiceNumber}.pdf`);
-        
         setPdfInvoice(null);
       } catch (error) {
         console.error('Error generating PDF:', error);

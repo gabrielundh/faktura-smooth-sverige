@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   username: string;
@@ -45,6 +44,7 @@ export interface Customer {
   reference?: string;
   address: Address;
   contact: Contact;
+  userId: string;
 }
 
 export interface InvoiceItem {

@@ -1,6 +1,5 @@
-
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User } from '../types';
+import { User, Company, Address, Contact } from '../types';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
@@ -21,6 +20,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const { toast } = useToast();
+
+  const transformCompany = (data: any): Company => ({
+    name: data.name,
+    orgNumber: data.orgNumber,
+    vatNumber: data.vatNumber,
+    address: data.address as Address,
+    contact: data.contact as Contact,
+    bankgiro: data.bankgiro,
+    plusgiro: data.plusgiro,
+    iban: data.iban,
+    swish: data.swish,
+    accountNumber: data.accountNumber,
+    clearingNumber: data.clearingNumber,
+    bankName: data.bankName,
+    swift: data.swift,
+    taxRate: data.taxRate,
+    logo: data.logo
+  });
 
   useEffect(() => {
     // Set up auth state listener
@@ -64,7 +81,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           id: session.user.id,
           username: data.username,
           email: session.user.email || '',
-          company: data.company
+          company: transformCompany(data.company)
         });
       }
     } catch (error) {
@@ -80,12 +97,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     try {
+      // Check Supabase connection first
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Supabase connection error:', sessionError);
+        toast({
+          title: "Anslutningsfel",
+          description: "Kunde inte ansluta till servern. Kontrollera din internetanslutning.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      console.log('Attempting login...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) {
+        console.error('Login error details:', {
+          message: error.message,
+          status: error.status,
+          name: error.name
+        });
         toast({
           title: "Fel inloggningsuppgifter",
           description: "Kontrollera e-postadress och lösenord",
@@ -94,6 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return false;
       }
 
+      console.log('Login successful:', data);
       toast({
         title: "Inloggad",
         description: "Du är nu inloggad",

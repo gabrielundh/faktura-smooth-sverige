@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Company } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,6 +46,14 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
         toast.error("Du måste vara inloggad för att uppdatera företagsinformation");
         return;
       }
+
+      // Check Supabase connection
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.error('Supabase connection error:', sessionError);
+        toast.error("Kunde inte ansluta till servern. Kontrollera din internetanslutning.");
+        return;
+      }
       
       const updatedCompany = {
         name,
@@ -84,6 +91,12 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
       
       if (error) {
         console.error('Error updating company:', error);
+        console.error('Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         toast.error("Ett fel uppstod när företagsinformationen skulle uppdateras");
         return;
       }

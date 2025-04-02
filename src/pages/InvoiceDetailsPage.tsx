@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
@@ -46,23 +45,53 @@ const InvoiceDetailsPage: React.FC = () => {
       const element = document.getElementById('invoice-pdf');
       if (!element) return;
       
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
       
-      const imgWidth = 210;
-      const imgHeight = canvas.height * imgWidth / canvas.width;
+      // Define page dimensions
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      // Render to canvas with high resolution
+      const canvas = await html2canvas(element, {
+        scale: 4, // Higher scale for better quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      // Get canvas dimensions
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+      
+      // Convert canvas to image
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      
+      // Scale to fit A4 page width while maintaining aspect ratio
+      const scaleFactor = pageWidth / canvasWidth;
+      const scaledHeight = canvasHeight * scaleFactor;
+      
+      // Add each page (if content overflows A4 height)
+      let heightLeft = scaledHeight;
+      let position = 0;
+      let page = 1;
+      
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, pageWidth, scaledHeight);
+      heightLeft -= pageHeight;
+      
+      // Add additional pages if content overflows
+      while (heightLeft > 0) {
+        position = -pageHeight * page;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pageWidth, scaledHeight);
+        heightLeft -= pageHeight;
+        page++;
+      }
+      
       pdf.save(`faktura-${invoice.invoiceNumber}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
