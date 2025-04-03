@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Invoice } from '@/types';
+import { Invoice, InvoiceItem, InvoiceStatus } from '@/types';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, FileText, Search, Trash2 } from 'lucide-react';
+import { Plus, FileText, Search, Trash2, Filter, SortDesc, SortAsc } from 'lucide-react';
 import InvoiceCard from '@/components/invoices/InvoiceCard';
 import {
   AlertDialog,
@@ -22,13 +22,28 @@ import html2canvas from 'html2canvas';
 import InvoicePDF from '@/components/invoices/InvoicePDF';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useData } from '@/contexts/DataContext';
+import { Badge } from '@/components/ui/badge';
+import { format, parseISO } from 'date-fns';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import InvoiceListItem from '@/components/invoices/InvoiceListItem';
+
+type SortField = 'date' | 'dueDate' | 'totalGross' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 const InvoicesPage: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const { invoices, customers, setInvoices } = useData();
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus[]>([]);
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [pdfInvoice, setPdfInvoice] = useState<Invoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,21 +89,34 @@ const InvoicesPage: React.FC = () => {
             userId: customerData.user_id || ''
           };
           
+          // Transform invoice items
+          const parsedItems: InvoiceItem[] = Array.isArray(item.items) 
+            ? item.items.map((itm: any) => ({
+                id: itm.id || `item-${Date.now()}`,
+                description: itm.description || '',
+                quantity: Number(itm.quantity) || 0,
+                unit: itm.unit || 'st',
+                price: Number(itm.price) || 0,
+                taxRate: Number(itm.taxRate) || 0,
+                articleNumber: itm.articleNumber || ''
+              }))
+            : [];
+          
           return {
             id: item.id,
             invoiceNumber: item.invoice_number,
             customer: transformedCustomer,
             date: item.date,
             dueDate: item.due_date,
-            items: item.items || [],
-            status: item.status,
-            type: item.type,
+            items: parsedItems,
+            status: (item.status || 'draft') as InvoiceStatus,
+            type: (item.type || 'invoice') as 'invoice' | 'credit',
             reference: item.reference,
             customerReference: item.customer_reference,
             notes: item.notes,
             paymentTerms: item.payment_terms,
             currency: item.currency,
-            language: item.language,
+            language: item.language as 'sv' | 'en',
             totalNet: item.total_net,
             totalTax: item.total_tax,
             totalGross: item.total_gross,
@@ -110,14 +138,85 @@ const InvoicesPage: React.FC = () => {
     }
   };
   
+  // Filter invoices based on search term and status filter
   const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
-      invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      invoice.customer.name.toLowerCase().includes(search.toLowerCase());
-      
-    if (filter === 'all') return matchesSearch;
-    return matchesSearch && invoice.status === filter;
+    // Status filter
+    if (statusFilter.length > 0 && !statusFilter.includes(invoice.status)) {
+      return false;
+    }
+    
+    // Search filter
+    const customer = customers.find(c => c.id === invoice.customer.id);
+    const searchTerms = search.toLowerCase();
+    return (
+      invoice.invoiceNumber.toLowerCase().includes(searchTerms) ||
+      (customer && customer.name.toLowerCase().includes(searchTerms)) ||
+      format(parseISO(invoice.date), 'yyyy-MM-dd').includes(searchTerms) ||
+      format(parseISO(invoice.dueDate), 'yyyy-MM-dd').includes(searchTerms) ||
+      invoice.totalGross.toString().includes(searchTerms)
+    );
   });
+  
+  // Sort invoices
+  const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+    if (sortField === 'date' || sortField === 'dueDate') {
+      const dateA = new Date(a[sortField]);
+      const dateB = new Date(b[sortField]);
+      return sortDirection === 'asc' 
+        ? dateA.getTime() - dateB.getTime() 
+        : dateB.getTime() - dateA.getTime();
+    } else if (sortField === 'totalGross') {
+      return sortDirection === 'asc' 
+        ? a.totalGross - b.totalGross 
+        : b.totalGross - a.totalGross;
+    } else if (sortField === 'status') {
+      const statusOrder: Record<InvoiceStatus, number> = { 
+        'paid': 0, 
+        'sent': 1, 
+        'draft': 2, 
+        'late': 3, 
+        'cancelled': 4 
+      };
+      const statusA = statusOrder[a.status] || 5;
+      const statusB = statusOrder[b.status] || 5;
+      return sortDirection === 'asc' 
+        ? statusA - statusB 
+        : statusB - statusA;
+    }
+    
+    return 0;
+  });
+  
+  const toggleStatusFilter = (status: InvoiceStatus) => {
+    setStatusFilter(prev => 
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+  
+  const clearFilters = () => {
+    setStatusFilter([]);
+    setSearch('');
+  };
+  
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+  
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? (
+      <SortAsc className="h-4 w-4 ml-1" />
+    ) : (
+      <SortDesc className="h-4 w-4 ml-1" />
+    );
+  };
   
   const handleDeleteConfirm = async () => {
     if (invoiceToDelete) {
@@ -132,7 +231,8 @@ const InvoicesPage: React.FC = () => {
         }
         
         // Remove from local state
-        setInvoices(invoices.filter(invoice => invoice.id !== invoiceToDelete));
+        const updatedInvoices = invoices.filter(invoice => invoice.id !== invoiceToDelete);
+        setInvoices(updatedInvoices);
         
         toast({
           title: "Faktura borttagen",
@@ -235,15 +335,15 @@ const InvoicesPage: React.FC = () => {
           <h1 className="text-2xl font-bold tracking-tight">Fakturor</h1>
         </div>
         <Button asChild className="bg-invoice-700 hover:bg-invoice-800">
-          <Link to="/invoices/new">
+          <Link to="/app/invoices/new">
             <Plus className="h-4 w-4 mr-2" />
             Skapa ny faktura
           </Link>
         </Button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-grow">
           <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <Input
             placeholder="Sök fakturor..."
@@ -252,59 +352,133 @@ const InvoicesPage: React.FC = () => {
             className="pl-9"
           />
         </div>
-        <div className="w-full md:w-48">
-          <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filtrera status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alla</SelectItem>
-              <SelectItem value="draft">Utkast</SelectItem>
-              <SelectItem value="sent">Skickad</SelectItem>
-              <SelectItem value="paid">Betald</SelectItem>
-              <SelectItem value="late">Försenad</SelectItem>
-              <SelectItem value="cancelled">Makulerad</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="flex items-center">
+              <Filter className="h-4 w-4 mr-2" />
+              Filter
+              {statusFilter.length > 0 && (
+                <Badge className="ml-2 bg-invoice-700">{statusFilter.length}</Badge>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <div className="p-2">
+              <div className="font-medium mb-2">Status</div>
+              <div className="space-y-1">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="status-draft"
+                    checked={statusFilter.includes('draft')}
+                    onChange={() => toggleStatusFilter('draft')}
+                    className="mr-2"
+                  />
+                  <label htmlFor="status-draft" className="text-sm cursor-pointer">Utkast</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="status-sent"
+                    checked={statusFilter.includes('sent')}
+                    onChange={() => toggleStatusFilter('sent')}
+                    className="mr-2"
+                  />
+                  <label htmlFor="status-sent" className="text-sm cursor-pointer">Skickad</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="status-paid"
+                    checked={statusFilter.includes('paid')}
+                    onChange={() => toggleStatusFilter('paid')}
+                    className="mr-2"
+                  />
+                  <label htmlFor="status-paid" className="text-sm cursor-pointer">Betald</label>
+                </div>
+              </div>
+              
+              {(statusFilter.length > 0 || search) && (
+                <Button 
+                  variant="ghost" 
+                  className="w-full mt-4 text-xs h-8"
+                  onClick={clearFilters}
+                >
+                  Rensa filter
+                </Button>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-12">
-          <div className="h-12 w-12 mx-auto rounded-full border-4 border-gray-200 border-t-invoice-700 animate-spin mb-4"></div>
-          <h3 className="text-lg font-medium text-gray-700">Laddar fakturor...</h3>
-        </div>
-      ) : filteredInvoices.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInvoices.map((invoice) => (
-            <InvoiceCard
-              key={invoice.id}
-              invoice={invoice}
-              onDelete={handleDeleteClick}
-              onPrint={handlePrint}
-              onDownload={handleDownload}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <FileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-700">Inga fakturor hittades</h3>
-          <p className="text-gray-500 mt-1">
-            {search || filter !== 'all' 
-              ? 'Prova att ändra din sökning eller filter' 
-              : 'Börja genom att skapa din första faktura'}
-          </p>
-          {!search && filter === 'all' && (
-            <Button asChild className="mt-4 bg-invoice-700 hover:bg-invoice-800">
-              <Link to="/invoices/new">
-                <Plus className="h-4 w-4 mr-2" />
-                Skapa ny faktura
-              </Link>
-            </Button>
-          )}
-        </div>
-      )}
+      <div className="bg-white overflow-hidden rounded-md border">
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="h-12 w-12 mx-auto rounded-full border-4 border-gray-200 border-t-invoice-700 animate-spin mb-4"></div>
+            <h3 className="text-lg font-medium text-gray-700">Laddar fakturor...</h3>
+          </div>
+        ) : sortedInvoices.length > 0 ? (
+          <div>
+            <div className="grid grid-cols-12 gap-4 p-4 border-b bg-gray-50 text-sm font-medium text-gray-500">
+              <div className="col-span-5 sm:col-span-3 flex items-center cursor-pointer" onClick={() => toggleSort('date')}>
+                <span>Faktura</span>
+                <SortIcon field="date" />
+              </div>
+              <div className="hidden sm:flex col-span-2 items-center cursor-pointer" onClick={() => toggleSort('dueDate')}>
+                <span>Förfallodatum</span>
+                <SortIcon field="dueDate" />
+              </div>
+              <div className="col-span-4 sm:col-span-2">Kund</div>
+              <div className="hidden sm:flex col-span-2 items-center justify-end cursor-pointer" onClick={() => toggleSort('totalGross')}>
+                <span>Belopp</span>
+                <SortIcon field="totalGross" />
+              </div>
+              <div className="col-span-3 sm:col-span-2 flex items-center justify-end cursor-pointer" onClick={() => toggleSort('status')}>
+                <span>Status</span>
+                <SortIcon field="status" />
+              </div>
+              <div className="hidden sm:block col-span-1"></div>
+            </div>
+            
+            <div>
+              {sortedInvoices.map(invoice => (
+                <InvoiceListItem 
+                  key={invoice.id} 
+                  invoice={invoice} 
+                  customer={customers.find(c => c.id === invoice.customer.id)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-12 px-4">
+            <FileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+            <h3 className="text-lg font-medium text-gray-700">Inga fakturor hittades</h3>
+            <p className="text-gray-500 mt-1 mb-4">
+              {search || statusFilter.length > 0
+                ? 'Prova att ändra dina sökkriterier eller filter'
+                : 'Kom igång med att skapa din första faktura'}
+            </p>
+            
+            {!(search || statusFilter.length > 0) && (
+              <Button asChild className="bg-invoice-700 hover:bg-invoice-800">
+                <Link to="/app/invoices/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Skapa faktura
+                </Link>
+              </Button>
+            )}
+            
+            {(search || statusFilter.length > 0) && (
+              <Button variant="outline" onClick={clearFilters}>
+                Rensa filter
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
 
       <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
         <AlertDialogContent>

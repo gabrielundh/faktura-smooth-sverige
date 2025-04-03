@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Users, FileText, Settings } from 'lucide-react';
@@ -9,7 +8,7 @@ const Sidebar: React.FC = () => {
       <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
         <nav className="mt-5 flex-1 px-3 space-y-1">
           <NavLink
-            to="/"
+            to="/app"
             className={({ isActive }) =>
               `group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                 isActive
@@ -17,13 +16,14 @@ const Sidebar: React.FC = () => {
                   : 'text-gray-700 hover:bg-gray-50'
               }`
             }
+            end
           >
             <Home className="mr-3 h-5 w-5" />
             Översikt
           </NavLink>
 
           <NavLink
-            to="/customers"
+            to="/app/customers"
             className={({ isActive }) =>
               `group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                 isActive
@@ -37,7 +37,7 @@ const Sidebar: React.FC = () => {
           </NavLink>
 
           <NavLink
-            to="/invoices"
+            to="/app/invoices"
             className={({ isActive }) =>
               `group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                 isActive
@@ -51,7 +51,7 @@ const Sidebar: React.FC = () => {
           </NavLink>
 
           <NavLink
-            to="/settings"
+            to="/app/settings"
             className={({ isActive }) =>
               `group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                 isActive

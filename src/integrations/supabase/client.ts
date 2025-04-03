@@ -8,4 +8,39 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: true,
+      storageKey: 'faktura-smooth-auth',
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    },
+    global: {
+      headers: {
+        'x-application-name': 'faktura-smooth',
+      },
+      fetch: (...args) => {
+        // Custom fetch with timeout
+        const [resource, config] = args;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10-second timeout
+        
+        return fetch(resource, {
+          ...config,
+          signal: controller.signal
+        }).finally(() => {
+          clearTimeout(timeoutId);
+        });
+      }
+    },
+    realtime: {
+      timeout: 30000, // Increase timeout to 30s
+    },
+    db: {
+      schema: 'public',
+    },
+  }
+);

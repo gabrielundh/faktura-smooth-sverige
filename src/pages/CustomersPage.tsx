@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Link } from 'react-router-dom';
@@ -46,7 +45,7 @@ const CustomersPage: React.FC = () => {
           <h1 className="text-2xl font-bold tracking-tight">Kunder</h1>
         </div>
         <Button asChild className="bg-invoice-700 hover:bg-invoice-800">
-          <Link to="/customers/new">
+          <Link to="/app/customers/new">
             <Plus className="h-4 w-4 mr-2" />
             Lägg till ny kund
           </Link>
@@ -84,7 +83,7 @@ const CustomersPage: React.FC = () => {
           </p>
           {!search && (
             <Button asChild className="mt-4 bg-invoice-700 hover:bg-invoice-800">
-              <Link to="/customers/new">
+              <Link to="/app/customers/new">
                 <Plus className="h-4 w-4 mr-2" />
                 Lägg till ny kund
               </Link>

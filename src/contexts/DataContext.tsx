@@ -8,6 +8,7 @@ interface DataContextType {
   customers: Customer[];
   invoices: Invoice[];
   invoiceItems: InvoiceItem[];
+  setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>;
   addCustomer: (customer: Omit<Customer, 'id'>) => Promise<Customer>;
   updateCustomer: (customer: Customer) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
@@ -364,10 +365,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <DataContext.Provider value={{ 
+    <DataContext.Provider value={{
       customers,
       invoices,
       invoiceItems,
+      setInvoices,
       addCustomer,
       updateCustomer,
       deleteCustomer,

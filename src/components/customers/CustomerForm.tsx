@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Customer } from '@/types';
 import { useData } from '@/contexts/DataContext';
@@ -6,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CustomerFormProps {
   existingCustomer?: Customer;
@@ -14,6 +14,7 @@ interface CustomerFormProps {
 const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
   const { addCustomer, updateCustomer } = useData();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [name, setName] = useState(existingCustomer?.name || '');
   const [orgNumber, setOrgNumber] = useState(existingCustomer?.orgNumber || '');
@@ -32,6 +33,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!user) return;
+
     const customerData = {
       name,
       orgNumber,
@@ -47,7 +50,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
         name: contactName,
         email,
         phone
-      }
+      },
+      userId: user.id
     };
 
     if (existingCustomer) {
@@ -119,7 +123,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={street} 
               onChange={(e) => setStreet(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -129,7 +132,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={postalCode} 
               onChange={(e) => setPostalCode(e.target.value)} 
               className="invoice-field" 
-              required 
               placeholder="XXX XX" 
             />
           </div>
@@ -140,7 +142,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={city} 
               onChange={(e) => setCity(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -150,7 +151,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={country} 
               onChange={(e) => setCountry(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
         </div>
@@ -166,7 +166,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={contactName} 
               onChange={(e) => setContactName(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -177,7 +176,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={email} 
               onChange={(e) => setEmail(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -187,7 +185,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
               value={phone} 
               onChange={(e) => setPhone(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
         </div>
