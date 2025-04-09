@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
-import { FileText, AlertTriangle } from 'lucide-react';
+import { FileText, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const EditInvoicePage: React.FC = () => {
@@ -25,7 +24,7 @@ const EditInvoicePage: React.FC = () => {
             Fakturan du försöker redigera kan ha raderats eller existerar inte.
           </p>
           <Button 
-            onClick={() => navigate('/invoices')} 
+            onClick={() => navigate('/app/invoices')} 
             className="bg-invoice-700 hover:bg-invoice-800"
           >
             Tillbaka till fakturor
@@ -40,6 +39,11 @@ const EditInvoicePage: React.FC = () => {
       <div className="flex items-center mb-6">
         <FileText className="h-5 w-5 mr-2 text-invoice-700" />
         <h1 className="text-2xl font-bold tracking-tight">Redigera faktura #{invoice.invoiceNumber}</h1>
+        <Button variant="outline" size="sm" className="ml-auto" 
+          onClick={() => navigate('/app/invoices')}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Tillbaka
+        </Button>
       </div>
       
       <InvoiceForm existingInvoice={invoice} />

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -73,7 +72,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ existingInvoice }) => {
     setItems(newItems);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedCustomer) {
@@ -130,16 +129,20 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ existingInvoice }) => {
       isCredit: false
     };
 
-    if (existingInvoice) {
-      updateInvoice({
-        ...invoiceData,
-        id: existingInvoice.id
-      });
-    } else {
-      addInvoice(invoiceData);
+    try {
+      if (existingInvoice) {
+        await updateInvoice({
+          ...invoiceData,
+          id: existingInvoice.id
+        });
+      } else {
+        await addInvoice(invoiceData);
+      }
+      navigate('/app/invoices');
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      // Error toast is already handled in addInvoice/updateInvoice
     }
-
-    navigate('/invoices');
   };
 
   return (
@@ -272,7 +275,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ existingInvoice }) => {
           <table className="w-full invoice-table">
             <thead>
               <tr>
-                <th>Artikelnr</th>
+                <th className="w-24">Artikelnr</th>
                 <th>Beskrivning</th>
                 <th>Antal</th>
                 <th>Enhet</th>
@@ -299,7 +302,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ existingInvoice }) => {
             <tbody>
               {items.map((item, index) => (
                 <tr key={item.id}>
-                  <td>
+                  <td className="w-24">
                     <Input 
                       value={item.articleNumber || ''} 
                       onChange={(e) => updateItem(index, 'articleNumber', e.target.value)} 
@@ -409,7 +412,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ existingInvoice }) => {
       </div>
 
       <div className="flex justify-end space-x-3">
-        <Button type="button" variant="outline" onClick={() => navigate('/invoices')}>Avbryt</Button>
+        <Button type="button" variant="outline" onClick={() => navigate('/app/invoices')}>Avbryt</Button>
         <Button type="submit" className="bg-invoice-700 hover:bg-invoice-800">
           {existingInvoice ? 'Uppdatera faktura' : 'Skapa faktura'}
         </Button>

@@ -8,6 +8,19 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+const MAX_RETRIES = 2;
+
+// Cache auth tokens to prevent unnecessary refreshes
+let authTokenCache = {
+  access_token: localStorage.getItem('sb-access-token') || null,
+  expires_at: localStorage.getItem('sb-expires-at') ? parseInt(localStorage.getItem('sb-expires-at') || '0') : 0
+};
+
+// Try to preserve tokens even if localStorage is cleared
+if (authTokenCache.access_token) {
+  console.log('Using cached auth token');
+}
+
 export const supabase = createClient<Database>(
   SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY,
@@ -16,24 +29,111 @@ export const supabase = createClient<Database>(
       persistSession: true,
       storageKey: 'faktura-smooth-auth',
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: true,
+      flowType: 'implicit' // Try implicit flow which might be faster
     },
     global: {
       headers: {
         'x-application-name': 'faktura-smooth',
       },
       fetch: (...args) => {
-        // Custom fetch with timeout
-        const [resource, config] = args;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10-second timeout
+        // Custom fetch with timeout and retries
+        const [resource, configParam] = args;
         
-        return fetch(resource, {
-          ...config,
-          signal: controller.signal
-        }).finally(() => {
-          clearTimeout(timeoutId);
-        });
+        // Function to attempt the fetch with exponential backoff
+        const attemptFetch = async (attempt = 0): Promise<Response> => {
+          const controller = new AbortController();
+          
+          // Use mutable config
+          let config = {...configParam};
+          
+          // Increase timeout for authentication-related requests
+          const isAuthRequest = typeof resource === 'string' && 
+            (resource.includes('/auth/') || resource.includes('token') || resource.includes('sign'));
+            
+          const timeoutMs = isAuthRequest ? 20000 : 10000; // 20 seconds for auth, 10 for others
+          
+          // Add auth token to request if available and it's an auth request
+          if (isAuthRequest && authTokenCache.access_token && 
+              authTokenCache.expires_at > Date.now() && 
+              !config.headers?.['Authorization']) {
+            
+            // Create a copy of config to avoid modifying the original
+            if (!config.headers) {
+              config.headers = {};
+            } else {
+              config.headers = {...config.headers};
+            }
+            
+            // Set Authorization header with cached token
+            config.headers['Authorization'] = `Bearer ${authTokenCache.access_token}`;
+          }
+          
+          console.log(`Fetch attempt ${attempt + 1}/${MAX_RETRIES + 1} to ${
+            typeof resource === 'string' ? resource : 'URL object'
+          }`);
+          
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+            console.log(`Request timed out after ${timeoutMs}ms`);
+          }, timeoutMs);
+          
+          try {
+            const response = await fetch(resource, {
+              ...config,
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // If it's an auth response, cache the token
+            if (isAuthRequest && response.ok) {
+              try {
+                const responseData = await response.clone().json();
+                if (responseData.access_token && responseData.expires_at) {
+                  authTokenCache = {
+                    access_token: responseData.access_token,
+                    expires_at: responseData.expires_at
+                  };
+                  
+                  // Store in localStorage as backup
+                  localStorage.setItem('sb-access-token', responseData.access_token);
+                  localStorage.setItem('sb-expires-at', responseData.expires_at.toString());
+                  
+                  console.log('Cached new auth token');
+                }
+              } catch (e) {
+                // Ignore parsing errors for non-JSON responses
+              }
+            }
+            
+            // If the response is not ok and we haven't exceeded retries, try again
+            if (!response.ok && attempt < MAX_RETRIES) {
+              const backoffTime = Math.min(1000 * Math.pow(2, attempt), 5000); // Exponential backoff
+              console.log(`Request failed with status ${response.status}. Retrying in ${backoffTime}ms...`);
+              await new Promise(resolve => setTimeout(resolve, backoffTime));
+              return attemptFetch(attempt + 1);
+            }
+            
+            return response;
+          } catch (error) {
+            clearTimeout(timeoutId);
+            
+            if ((error as any)?.name === 'AbortError') {
+              console.log('Request was aborted due to timeout');
+              if (attempt < MAX_RETRIES) {
+                const backoffTime = Math.min(1000 * Math.pow(2, attempt), 5000); // Exponential backoff
+                console.log(`Retrying timed out request in ${backoffTime}ms...`);
+                await new Promise(resolve => setTimeout(resolve, backoffTime));
+                return attemptFetch(attempt + 1);
+              }
+            }
+            
+            throw error;
+          }
+        };
+        
+        return attemptFetch();
       }
     },
     realtime: {
@@ -44,3 +144,67 @@ export const supabase = createClient<Database>(
     },
   }
 );
+
+// Track last health check time and result
+let lastHealthCheck = {
+  time: 0,
+  result: null as any
+};
+
+// Add a health check function to test the connection
+export const checkSupabaseConnection = async () => {
+  const now = Date.now();
+  
+  // If we've done a health check in the last 10 seconds, return the cached result
+  if (now - lastHealthCheck.time < 10000 && lastHealthCheck.result) {
+    console.log('Using cached health check result');
+    return lastHealthCheck.result;
+  }
+  
+  try {
+    console.log('Testing Supabase connection...');
+    const start = Date.now();
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_PUBLISHABLE_KEY
+      }
+    });
+    
+    const elapsed = Date.now() - start;
+    const result = await response.json();
+    
+    console.log(`Supabase health check completed in ${elapsed}ms:`, result);
+    
+    const healthResult = {
+      ok: response.ok,
+      status: response.status,
+      result,
+      elapsed
+    };
+    
+    // Cache the result
+    lastHealthCheck = {
+      time: now,
+      result: healthResult
+    };
+    
+    return healthResult;
+  } catch (error) {
+    console.error('Supabase health check failed:', error);
+    
+    const errorResult = {
+      ok: false,
+      error
+    };
+    
+    // Cache the error result too, but for a shorter time
+    lastHealthCheck = {
+      time: now,
+      result: errorResult
+    };
+    
+    return errorResult;
+  }
+};

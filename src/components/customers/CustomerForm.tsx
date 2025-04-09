@@ -63,7 +63,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
       addCustomer(customerData);
     }
 
-    navigate('/customers');
+    navigate('/app/customers');
   };
 
   return (
@@ -191,7 +191,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ existingCustomer }) => {
       </div>
 
       <div className="flex justify-end space-x-3">
-        <Button type="button" variant="outline" onClick={() => navigate('/customers')}>Avbryt</Button>
+        <Button type="button" variant="outline" onClick={() => navigate('/app/customers')}>Avbryt</Button>
         <Button type="submit" className="bg-invoice-700 hover:bg-invoice-800">
           {existingCustomer ? 'Uppdatera kund' : 'Lägg till kund'}
         </Button>

@@ -27,6 +27,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isOffline, setIsOffline] = useState(false);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const authListenerRef = useRef<any>(null);
+  const initializationCompleted = useRef(false);
   const { toast } = useToast();
 
   const transformCompany = (data: any): Company => ({
@@ -91,7 +92,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     try {
       console.log('Retrying Supabase connection...');
-      // Try to get the session directly without a timeout for retry attempts
+      // Try to get the session directly using the client's built-in timeout
       const { data, error } = await supabase.auth.getSession();
       
       if (error) {
@@ -116,113 +117,118 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Retry connection failed:', error);
       setIsLoading(false);
       setIsOffline(true);
-      toast({
-        title: "Connection Failed",
-        description: "Could not connect to server. Please check your internet connection.",
-        variant: "destructive"
-      });
+      
+      if ((error as any)?.name === 'AbortError') {
+        toast({
+          title: "Connection Failed",
+          description: "Request timed out. The service may be temporarily unavailable.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: "Could not connect to server. Please check your internet connection.",
+          variant: "destructive"
+        });
+      }
+      
       return false;
     }
   };
 
   useEffect(() => {
-    // Set up auth state listener with error handling
-    const setupAuthListener = async () => {
+    let isMounted = true;
+    
+    const initialize = async () => {
+      // Prevent multiple initializations
+      if (initializationCompleted.current) {
+        return;
+      }
+      
       try {
-        const { data } = supabase.auth.onAuthStateChange(
-          async (event, currentSession) => {
-            console.log("Auth state changed:", event);
-            
+        console.log("Starting auth initialization");
+        
+        // First, check for existing session
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          throw sessionError;
+        }
+        
+        if (sessionData?.session) {
+          console.log("Found existing session:", sessionData.session.user.id);
+          if (isMounted) {
+            setSession(sessionData.session);
+            try {
+              await fetchUserProfile(sessionData.session);
+            } catch (profileError) {
+              console.error("Error fetching initial profile:", profileError);
+              if (sessionData.session.user && isMounted) {
+                setUser({
+                  id: sessionData.session.user.id,
+                  username: sessionData.session.user.email?.split('@')[0] || 'User',
+                  email: sessionData.session.user.email || '',
+                  company: null
+                });
+              }
+            }
+          }
+        }
+        
+        // Set up auth listener only after initial session check
+        const { data: listener } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+          console.log("Auth state changed:", event, currentSession?.user?.id);
+          
+          if (isMounted) {
             if (currentSession) {
               setSession(currentSession);
               try {
                 await fetchUserProfile(currentSession);
               } catch (error) {
-                console.error("Error fetching user profile:", error);
+                console.error("Error in auth listener profile fetch:", error);
+                if (currentSession.user) {
+                  setUser({
+                    id: currentSession.user.id,
+                    username: currentSession.user.email?.split('@')[0] || 'User',
+                    email: currentSession.user.email || '',
+                    company: null
+                  });
+                }
               }
             } else {
               setUser(null);
               setSession(null);
             }
-            
-            setIsInitializing(false);
-            setIsLoading(false);
           }
-        );
+        });
         
-        authListenerRef.current = data;
+        authListenerRef.current = listener;
+        
       } catch (error) {
-        console.error("Error setting up auth listener:", error);
-        setIsInitializing(false);
-        setIsLoading(false);
-        setIsOffline(true);
-      }
-    };
-
-    // Initial session check
-    const checkSession = async () => {
-      try {
-        // Add timeout for session check to prevent infinite waiting
-        const timeoutPromise = new Promise<{ data: null, error: Error }>((_, reject) => 
-          setTimeout(() => reject(new Error('Operation timed out')), 10000)
-        );
-        
-        const sessionPromise = supabase.auth.getSession();
-        
-        // Race between session check and timeout
-        const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
-        
-        if (error) {
-          console.error("Error checking session:", error);
+        console.error("Auth initialization error:", error);
+        if (isMounted) {
           setIsOffline(true);
-          
           if (navigator.onLine) {
             toast({
               title: "Authentication Error",
-              description: "Could not authenticate. Please try signing in again.",
+              description: "Could not initialize authentication. Please try again.",
               variant: "destructive"
             });
           }
-          return;
-        }
-        
-        if (data?.session) {
-          setSession(data.session);
-          await fetchUserProfile(data.session);
-          setIsOffline(false);
-        } else {
-          console.log("No active session found");
-        }
-      } catch (error) {
-        console.error("Exception checking session:", error);
-        setIsOffline(true);
-        
-        if ((error as Error).message === 'Operation timed out') {
-          toast({
-            title: "Connection Error",
-            description: "Request timed out. The service may be temporarily unavailable.",
-            variant: "destructive"
-          });
-        } else if (navigator.onLine) {
-          toast({
-            title: "Connection Error",
-            description: "Could not connect to authentication service. Please try again later.",
-            variant: "destructive"
-          });
         }
       } finally {
-        setIsInitializing(false);
-        setIsLoading(false);
+        if (isMounted) {
+          setIsInitializing(false);
+          setIsLoading(false);
+          initializationCompleted.current = true;
+        }
       }
     };
-
-    // Setup auth first, then check session
-    setupAuthListener().then(() => {
-      checkSession();
-    });
-
-    // Cleanup function
+    
+    initialize();
+    
     return () => {
+      isMounted = false;
       if (authListenerRef.current?.subscription) {
         authListenerRef.current.subscription.unsubscribe();
       }
@@ -235,6 +241,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     
+    console.log(`Fetching profile for user: ${userSession.user.id}`);
+    
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -244,27 +252,98 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (error) {
         console.error('Error fetching user profile:', error);
+        
+        // Still set basic user information even if profile fetch fails
+        setUser({
+          id: userSession.user.id,
+          username: userSession.user.email?.split('@')[0] || 'User',
+          email: userSession.user.email || '',
+          company: null
+        });
+        
         return;
       }
 
       if (data) {
+        console.log('Profile data retrieved successfully');
         setUser({
           id: userSession.user.id,
-          username: data.username,
+          username: data.username || userSession.user.email?.split('@')[0] || 'User',
           email: userSession.user.email || '',
-          company: transformCompany(data.company)
+          company: data.company ? transformCompany(data.company) : null
         });
       } else {
         console.warn('User profile not found:', userSession.user.id);
+        
+        // Set basic user info if profile doesn't exist
+        setUser({
+          id: userSession.user.id,
+          username: userSession.user.email?.split('@')[0] || 'User',
+          email: userSession.user.email || '',
+          company: null
+        });
       }
     } catch (error) {
       console.error('Exception fetching user profile:', error);
+      
+      // Still set basic user information even if profile fetch fails
+      setUser({
+        id: userSession.user.id,
+        username: userSession.user.email?.split('@')[0] || 'User',
+        email: userSession.user.email || '',
+        company: null
+      });
     }
   };
 
   const refreshUser = async () => {
-    if (session) {
-      await fetchUserProfile(session);
+    if (!session) {
+      console.log('No session available for refresh');
+      return;
+    }
+
+    try {
+      console.log('Starting user refresh...');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error) {
+        console.error('Error in refreshUser:', error);
+        // Don't throw, just set basic user info
+        if (session.user) {
+          setUser({
+            id: session.user.id,
+            username: session.user.email?.split('@')[0] || 'User',
+            email: session.user.email || '',
+            company: user?.company || null // Keep existing company data if available
+          });
+        }
+        return;
+      }
+
+      if (data) {
+        console.log('Profile refresh successful');
+        setUser({
+          id: session.user.id,
+          username: data.username || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          company: data.company ? transformCompany(data.company) : null
+        });
+      }
+    } catch (error) {
+      console.error('Exception in refreshUser:', error);
+      // Don't throw, just keep existing user data
+      if (session.user && !user) {
+        setUser({
+          id: session.user.id,
+          username: session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          company: user?.company || null // Keep existing company data if available
+        });
+      }
     }
   };
 
@@ -280,19 +359,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setIsLoading(true);
     
+    // Clear any existing state that might interfere with the login
+    setIsInitializing(false);
+    
     try {
-      // Add timeout to prevent infinite waiting
-      const timeoutPromise = new Promise<{ data: null, error: Error }>((_, reject) => 
-        setTimeout(() => reject(new Error('Operation timed out')), 10000)
-      );
+      console.log('Attempting login for:', email);
       
-      const authPromise = supabase.auth.signInWithPassword({
+      // Remove the manual timeout logic and directly use the supabase client's built-in timeout
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
-      
-      // Race between auth operation and timeout
-      const { data, error } = await Promise.race([authPromise, timeoutPromise]);
 
       if (error) {
         console.error('Login error details:', {
@@ -311,7 +388,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return false;
       }
 
-      console.log('Login successful:', data);
+      console.log('Login successful:', data.user?.id);
+      
+      // Ensure we have the session and user data before proceeding
+      if (data.session) {
+        setSession(data.session);
+        
+        // Wait for fetchUserProfile to complete
+        try {
+          await fetchUserProfile(data.session);
+        } catch (profileError) {
+          console.error('Error fetching user profile after login:', profileError);
+          // Continue with login even if profile fetch fails
+        }
+      }
       
       toast({
         title: "Login Successful",
@@ -332,7 +422,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           description: "You are offline. Please check your internet connection and try again.",
           variant: "destructive"
         });
-      } else if ((error as Error).message === 'Operation timed out') {
+      } else if ((error as any)?.name === 'AbortError') {
         toast({
           title: "Connection Error",
           description: "Request timed out. The service may be temporarily unavailable.",
@@ -364,12 +454,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true);
     
     try {
-      // Add timeout to prevent infinite waiting
-      const timeoutPromise = new Promise<{ data: null, error: Error }>((_, reject) => 
-        setTimeout(() => reject(new Error('Operation timed out')), 10000)
-      );
-      
-      const authPromise = supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -379,9 +464,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           emailRedirectTo: window.location.origin
         }
       });
-      
-      // Race between auth operation and timeout
-      const { data, error } = await Promise.race([authPromise, timeoutPromise]);
 
       if (error) {
         toast({
@@ -394,27 +476,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return false;
       }
 
-      // Automatically sign in after successful registration
+      // Check if signup was successful
       if (data && data.user) {
-        const loginRes = await login(email, password);
+        toast({
+          title: "Account Created",
+          description: "Please check your email to confirm your account before logging in.",
+        });
         
-        if (loginRes) {
-          toast({
-            title: "Account Created",
-            description: "Your account has been created and you are now logged in.",
-          });
-          
-          return true;
-        }
+        setIsLoading(false);
+        return true;
       }
 
       toast({
-        title: "Account Created",
-        description: "Your account has been created. You can now log in.",
+        title: "Registration Error",
+        description: "Could not create account. Please try again later.",
+        variant: "destructive"
       });
       
       setIsLoading(false);
-      return true;
+      return false;
     } catch (error) {
       console.error('Signup exception:', error);
       
@@ -426,7 +506,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           description: "You are offline. Please check your internet connection and try again.",
           variant: "destructive"
         });
-      } else if ((error as Error).message === 'Operation timed out') {
+      } else if ((error as any)?.name === 'AbortError') {
         toast({
           title: "Connection Error",
           description: "Request timed out. The service may be temporarily unavailable.",
@@ -447,12 +527,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      console.log("Logout function called");
+      
+      // Clear any local storage data first
+      localStorage.removeItem('faktura-smooth-auth');
+      localStorage.removeItem('sb-access-token');
+      localStorage.removeItem('sb-refresh-token');
+      localStorage.removeItem('sb-expires-at');
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
       
       if (error) {
         throw error;
       }
       
+      // Update state
       setUser(null);
       setSession(null);
       
@@ -460,6 +550,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         title: "Logged Out",
         description: "You have been logged out",
       });
+      
+      // Redirect to login page - safe way to redirect
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
       

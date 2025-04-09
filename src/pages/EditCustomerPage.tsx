@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
@@ -25,7 +24,7 @@ const EditCustomerPage: React.FC = () => {
             Kunden du försöker redigera kan ha raderats eller existerar inte.
           </p>
           <Button 
-            onClick={() => navigate('/customers')} 
+            onClick={() => navigate('/app/customers')} 
             className="bg-invoice-700 hover:bg-invoice-800"
           >
             Tillbaka till kunder

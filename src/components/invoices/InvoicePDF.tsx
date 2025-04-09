@@ -25,13 +25,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ invoice }) => {
         />
       );
     } else {
-      return (
-        <div className="h-16 mb-4 flex items-center">
-          <span className="text-4xl font-bold text-invoice-700">
-            {companyName.charAt(0).toUpperCase()}
-          </span>
-        </div>
-      );
+      return null; // Don't display anything when no logo is present
     }
   };
 

@@ -39,9 +39,18 @@ const Navbar: React.FC = () => {
                       <span>Inställningar</span>
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={logout} className="flex items-center cursor-pointer text-red-600">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Logga ut</span>
+                  <DropdownMenuItem>
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        logout();
+                      }} 
+                      className="flex items-center cursor-pointer text-red-600 w-full text-left"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Logga ut</span>
+                    </button>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -1,16 +1,35 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/contexts/DataContext';
-import { CreditCard, DollarSign, FileText, Users, Calendar, Plus, CheckCircle2 } from 'lucide-react';
+import { CreditCard, DollarSign, FileText, Users, Calendar, Plus, CheckCircle2, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { sv } from 'date-fns/locale';
 
 const Dashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated, session } = useAuth();
   const { invoices, customers } = useData();
+  const navigate = useNavigate();
+
+  // Ensure user is authenticated
+  useEffect(() => {
+    if (!isAuthenticated && !session) {
+      console.log("User not authenticated, redirecting to login");
+      navigate('/login');
+    }
+  }, [isAuthenticated, session, navigate]);
+
+  // Show loading state if user data is not yet available
+  if (!user) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-invoice-700 mb-4" />
+        <p className="text-lg text-gray-600">Laddar användardata...</p>
+      </div>
+    );
+  }
 
   // Calculate dashboard metrics
   const totalInvoices = invoices.length;
@@ -196,7 +215,7 @@ const Dashboard: React.FC = () => {
       <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
         <h2 className="text-lg font-semibold mb-4">Välkommen till FakturaSmooth</h2>
         <p className="mb-4">
-          Du är inloggad som {user?.company.name}. Detta är ett enkelt faktureringssystem som hjälper dig 
+          Du är inloggad som {user?.company?.name || user?.email}. Detta är ett enkelt faktureringssystem som hjälper dig 
           att skapa professionella fakturor som uppfyller svenska lagar och regler.
         </p>
         <div className="flex flex-wrap gap-3">

@@ -104,7 +104,7 @@ const LandingPage: React.FC = () => {
         clonedElement.style.left = '-9999px';
         clonedElement.style.top = '-9999px';
         document.body.appendChild(clonedElement);
-        
+
         // Process all input elements in the clone
         const inputs = clonedElement.querySelectorAll('input');
         inputs.forEach(input => {
@@ -140,32 +140,163 @@ const LandingPage: React.FC = () => {
             originalInput.parentNode?.replaceChild(span, originalInput);
           }
         });
+
+        // Better styling for PDF layout - match the professional blue-themed invoice
+        clonedElement.style.padding = '20mm 15mm 25mm 15mm'; // top, right, bottom, left
+        clonedElement.style.boxSizing = 'border-box';
+        clonedElement.style.maxWidth = '100%';
+        clonedElement.style.lineHeight = '1.5'; // Improve text spacing
         
-        // Generate PDF from the clone
+        // Enhance the FAKTURA title to match the blue-themed invoice
+        const fakturaTitle = clonedElement.querySelector('.text-blue-600');
+        if (fakturaTitle) {
+          (fakturaTitle as HTMLElement).style.fontSize = '28px';
+          (fakturaTitle as HTMLElement).style.color = '#2563EB'; // Brighter blue
+          (fakturaTitle as HTMLElement).style.letterSpacing = '1px';
+        }
+        
+        // Improve spacing between invoice info sections
+        const detailsSection = clonedElement.querySelector('.grid.grid-cols-2');
+        if (detailsSection) {
+          (detailsSection as HTMLElement).style.marginBottom = '40px';
+          (detailsSection as HTMLElement).style.display = 'flex';
+          (detailsSection as HTMLElement).style.justifyContent = 'space-between';
+        }
+        
+        // Style the labels to be bolder and stand out more
+        const labels = clonedElement.querySelectorAll('label');
+        labels.forEach(label => {
+          (label as HTMLElement).style.fontWeight = '600';
+        });
+        
+        // Improve table styling to match reference invoice
+        const table = clonedElement.querySelector('table');
+        if (table) {
+          (table as HTMLTableElement).style.width = '100%';
+          (table as HTMLTableElement).style.borderCollapse = 'collapse';
+          (table as HTMLTableElement).style.marginBottom = '35px'; // More space after table
+          
+          // Style table headers
+          const headers = table.querySelectorAll('th');
+          headers.forEach(header => {
+            (header as HTMLElement).style.backgroundColor = '#EFF6FF'; // Lighter blue background
+            (header as HTMLElement).style.padding = '10px';
+            (header as HTMLElement).style.borderBottom = '1px solid #BFDBFE';
+            (header as HTMLElement).style.color = '#1E40AF'; // Darker blue text
+            (header as HTMLElement).style.fontSize = '15px';
+          });
+          
+          // Style table cells
+          const cells = table.querySelectorAll('td');
+          cells.forEach(cell => {
+            (cell as HTMLElement).style.padding = '10px';
+            (cell as HTMLElement).style.borderBottom = '1px solid #E5E7EB'; // Lighter border
+          });
+        }
+        
+        // Style the totals section to match reference invoice
+        const totalsSection = clonedElement.querySelector('.flex.justify-end.mb-8');
+        if (totalsSection) {
+          (totalsSection as HTMLElement).style.marginBottom = '40px';
+          
+          // Make totals text bolder and larger
+          const totalsText = totalsSection.querySelectorAll('.font-bold');
+          totalsText.forEach(text => {
+            (text as HTMLElement).style.fontSize = '18px';
+            (text as HTMLElement).style.color = '#1E40AF'; // Darker blue
+          });
+        }
+        
+        // Style payment information section to match reference
+        const paymentSection = clonedElement.querySelector('.bg-gray-50');
+        if (paymentSection) {
+          (paymentSection as HTMLElement).style.backgroundColor = '#F9FAFB';
+          (paymentSection as HTMLElement).style.padding = '20px';
+          (paymentSection as HTMLElement).style.marginTop = '30px';
+          (paymentSection as HTMLElement).style.marginBottom = '40px';
+          (paymentSection as HTMLElement).style.border = '1px solid #E5E7EB';
+          (paymentSection as HTMLElement).style.borderRadius = '5px';
+          
+          // Style the heading
+          const paymentHeading = paymentSection.querySelector('h3');
+          if (paymentHeading) {
+            (paymentHeading as HTMLElement).style.fontSize = '18px';
+            (paymentHeading as HTMLElement).style.marginBottom = '15px';
+            (paymentHeading as HTMLElement).style.color = '#1E3A8A'; // Dark blue
+          }
+        }
+        
+        // Style footer section
+        const footerSection = clonedElement.querySelector('.mt-4.text-xs');
+        if (footerSection) {
+          (footerSection as HTMLElement).style.marginTop = '60px';
+          (footerSection as HTMLElement).style.color = '#6B7280';
+          (footerSection as HTMLElement).style.borderTop = '1px solid #E5E7EB';
+          (footerSection as HTMLElement).style.paddingTop = '15px';
+        }
+        
+        // Create PDF with A4 dimensions
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+          compress: true
+        });
+        
+        // A4 dimensions
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        
+        // Use higher DPI for better resolution
+        const dpi = 300; // Professional print quality DPI
+        const pixelsPerMm = dpi / 25.4;
+        const canvasWidth = Math.floor(pageWidth * pixelsPerMm);
+        const scale = canvasWidth / clonedElement.offsetWidth;
+        
+        // Generate PDF from the clone with high quality settings
         const canvas = await html2canvas(clonedElement, {
-          scale: 2,
+          scale: scale,
           useCORS: true,
           logging: false,
-          allowTaint: true,
-          backgroundColor: '#ffffff'
+          backgroundColor: '#ffffff',
+          imageTimeout: 0,
+          allowTaint: true
         });
         
         // Remove the clone from the DOM
         document.body.removeChild(clonedElement);
         
-        const imgData = canvas.toDataURL('image/png');
+        // Calculate dimensions for optimal A4 layout
+        const imgWidth = pageWidth;
         
-        // A4 size: 210 x 297 mm
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4'
+        // Less aggressive scaling to prevent squashing
+        const imgHeight = Math.min(pageHeight - 10, (canvas.height * imgWidth) / canvas.width);
+        
+        // Position content with appropriate margins and center it vertically
+        const horizontalMargin = 0;
+        const verticalMargin = Math.max(0, (pageHeight - imgHeight) / 2);
+        
+        // Add image to PDF with high quality JPEG format
+        pdf.addImage(
+          canvas.toDataURL('image/jpeg', 1.0),
+          'JPEG',
+          horizontalMargin,
+          verticalMargin,
+          imgWidth,
+          imgHeight,
+          undefined,
+          'FAST'
+        );
+        
+        // Set PDF metadata
+        pdf.setProperties({
+          title: `Faktura ${invoiceData.invoiceNumber || 'ny'}`,
+          subject: `Faktura till ${invoiceData.customerName || 'kund'}`,
+          creator: 'Faktura Smooth Sverige',
+          author: invoiceData.companyName || 'FakturaSmooth',
+          keywords: `faktura, ${invoiceData.invoiceNumber || 'ny'}, ${invoiceData.customerName || 'kund'}`
         });
-
-        const imgWidth = pdf.internal.pageSize.getWidth();
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
         
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
         pdf.save(`faktura-${invoiceData.invoiceNumber || 'ny'}.pdf`);
         
       } catch (error) {

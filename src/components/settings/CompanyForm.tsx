@@ -44,31 +44,26 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
     try {
       if (!user) {
         toast.error("Du måste vara inloggad för att uppdatera företagsinformation");
+        setIsLoading(false);
         return;
       }
 
-      // Check Supabase connection
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        console.error('Supabase connection error:', sessionError);
-        toast.error("Kunde inte ansluta till servern. Kontrollera din internetanslutning.");
-        return;
-      }
+      console.log('Starting company update...');
       
       const updatedCompany = {
-        name,
-        orgNumber,
+        name: name || '',
+        orgNumber: orgNumber || '',
         vatNumber,
         address: {
-          street,
-          postalCode,
-          city,
-          country
+          street: street || '',
+          postalCode: postalCode || '',
+          city: city || '',
+          country: country || ''
         },
         contact: {
-          name: contactName,
-          email,
-          phone
+          name: contactName || '',
+          email: email || '',
+          phone: phone || ''
         },
         bankgiro,
         plusgiro,
@@ -78,33 +73,44 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
         clearingNumber,
         bankName,
         swift,
-        taxRate,
+        taxRate: taxRate || 25,
         logo
       };
+
+      console.log('Updating company profile...');
       
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
           company: updatedCompany
         })
         .eq('id', user.id);
       
-      if (error) {
-        console.error('Error updating company:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
+      if (updateError) {
+        console.error('Error updating company:', updateError);
         toast.error("Ett fel uppstod när företagsinformationen skulle uppdateras");
+        setIsLoading(false);
         return;
       }
-      
-      // Refresh user data to get updated company info
-      await refreshUser();
-      
+
+      // Update local state immediately
+      if (user) {
+        const updatedUser = {
+          ...user,
+          company: updatedCompany
+        };
+        // Update any local state or context that holds user data
+      }
+
       toast.success("Företagsinformationen har uppdaterats");
+      
+      // Try to refresh user data, but don't block on it
+      try {
+        await refreshUser();
+      } catch (refreshError) {
+        console.error('Error refreshing user data:', refreshError);
+        // Don't show error since the save was successful
+      }
     } catch (error) {
       console.error('Error saving company details:', error);
       toast.error("Ett fel uppstod när företagsinformationen skulle uppdateras");
@@ -229,7 +235,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={name} 
               onChange={(e) => setName(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -239,7 +244,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={orgNumber} 
               onChange={(e) => setOrgNumber(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -262,7 +266,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={taxRate} 
               onChange={(e) => setTaxRate(Number(e.target.value))} 
               className="invoice-field" 
-              required 
             />
           </div>
         </div>
@@ -278,7 +281,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={street} 
               onChange={(e) => setStreet(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -288,7 +290,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={postalCode} 
               onChange={(e) => setPostalCode(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -298,7 +299,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={city} 
               onChange={(e) => setCity(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -308,7 +308,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={country} 
               onChange={(e) => setCountry(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
         </div>
@@ -324,7 +323,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={contactName} 
               onChange={(e) => setContactName(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -335,7 +333,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={email} 
               onChange={(e) => setEmail(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
           <div>
@@ -345,7 +342,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ company }) => {
               value={phone} 
               onChange={(e) => setPhone(e.target.value)} 
               className="invoice-field" 
-              required 
             />
           </div>
         </div>
